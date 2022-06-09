@@ -1,4 +1,4 @@
-#自行練習training
+#自行練習training 使用CNN及FCN
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -128,8 +128,6 @@ if __name__ == "__main__":
     test_dataset = datasets.MNIST(root='../dataset/', train=False, download=True, transform=transform)
     test_loader = DataLoader(test_dataset, shuffle=False, batch_size=batch_size,num_workers=4)
 
-
-
     # lr=0.001
     model=CNN()
     model1 = "CNN"
@@ -146,24 +144,7 @@ if __name__ == "__main__":
     optimizer_out = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.00001)
     aa2,bb2=train_val(model1=model1,optimizer_in=optimizer_out,epoch=epoch)
 
-
-    
-    # ---------------------------逐行讀取
-    # f = open('{}.txt'.format(model))
-    # a = f.readlines()
-    # a = [int(i) for i in a ]
-    # print(a)
-    # f.close()
-    # ---------------------------
-    # 
-    # text = f.read()
-    # text=int(text)
-    # a=[0,1,2,3]
-    # print(text)
-    # f.close()
-
-
-    plt.title("MNIST CNN YCLin") # title
+    plt.title("MNIST Classfication SUNNY") # title
     plt.ylabel("Val_acc") # y label
     plt.xlabel("iteration") # x label
     plt.plot(aa1, bb1,color='r', label='CNN_acc')
