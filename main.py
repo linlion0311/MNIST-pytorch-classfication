@@ -1,154 +1,139 @@
-#自行練習training 使用CNN及FCN
+# 自行練習training 使用CNN及FCN
+import cv2
+from tqdm import tqdm
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from torchvision import datasets
 from torchvision import transforms
-
-import numpy as np
-import matplotlib.pyplot as plt
-import pylab as pl
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from random import random
+from model.CNN import CNN
 
 
-class CNN(nn.Module):
-    def __init__(self):
-        super(CNN, self).__init__()
-        self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=5)
-        self.conv2 = torch.nn.Conv2d(64, 128, kernel_size=5)
-        self.pooling = torch.nn.MaxPool2d(2)
-        self.fc = torch.nn.Linear(16*128, 10)
-        self.relu = torch.nn.ReLU()
+def train_val(model, criterion, optimizer, lr_scheduler):
+    model.train()
+    total_correct, total_data = 0, 0
+    loop = tqdm(enumerate(train_loader), total=len(
+        train_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+    for iter, (images, labels) in loop:
+        images = images.cuda()
+        labels = labels.cuda()
 
-    def forward(self, x):
-        batch_size = x.size(0)
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        loop.set_postfix(loss=loss.item())
 
-        x = self.conv1(x)
-        x = self.pooling(x)
-        x = self.relu(x)
+        _, predicted = torch.max(outputs.data, dim=1)
+        total_correct += torch.eq(predicted, labels).sum().item()
+        total_data += labels.size(0)
 
-        x = self.conv2(x)
-        x = self.pooling(x)
-        x = self.relu(x)
+    train_acc = (total_correct/total_data)*100
+    lr_scheduler.step()
 
-        x = x.view(batch_size, -1)
-        x = self.fc(x)
-
-        return x
-
-class FC(torch.nn.Module):
-    def __init__(self):
-        super(FC, self).__init__()
-        self.l1 = torch.nn.Linear(784, 15)
-        self.l2 = torch.nn.Linear(15, 10)
-        self.relu = torch.nn.ReLU()
-
-    def forward(self, x):
-        x = x.view(-1, 784)
-        x = self.l1(x)
-        x = self.relu(x)
-        x = self.l2(x)
-
-        return x
-
-def train_val(model1,optimizer_in,epoch):
-    a=[]
-    b1=[]
-    max_acc=0.0
-    f = open('{}.txt'.format(model1),'w')
-    for i in range(epoch):
-        model.train()
-        total_correct=0
-        total_data=0
-        for iter,data in enumerate (train_loader):
-            images, labels = data
-            images=images.cuda()
+    model.eval()
+    total_correct, total_data, max_acc = 0, 0, 0.0
+    with torch.no_grad():
+        loop = tqdm(enumerate(test_loader), total=len(
+            test_loader), desc=f'Epoch {epoch+1}/{args.epochs}')
+        for iter, (images, labels) in loop:
+            images = images.cuda()
             labels = labels.cuda()
 
-            optimizer_in.zero_grad()
+            optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer_in.step()
 
             _, predicted = torch.max(outputs.data, dim=1)
             total_correct += torch.eq(predicted, labels).sum().item()
             total_data += labels.size(0)
-        # print("train_epcoh",i,"ACC",total_correct/total_data)
-        model.eval()
-        total_correct=0
-        total_data=0
-        
-        with torch.no_grad():
-            
-            
-            for iter,data in enumerate (test_loader):
 
-                images, labels = data
-                images=images.cuda()
-                labels = labels.cuda()
+        val_acc = (total_correct/total_data)*100
+        if val_acc >= max_acc:
+            max_acc = val_acc
+        else:
+            max_acc = max_acc
+    return train_acc, val_acc, max_acc
 
-                optimizer_in.zero_grad()
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                # loss.backward()
-                # optimizer.step()
 
-                _, predicted = torch.max(outputs.data, dim=1)
-                total_correct += torch.eq(predicted, labels).sum().item()
-                total_data += labels.size(0)
-
-            acc=total_correct/total_data  
-            acc *= 100
-            if acc>max_acc:
-                max_acc=acc
-            else: max_acc=max_acc
-
-            a.append(i)
-            b1.append(max_acc)
-            print("lr=",lr)
-            d=float(max_acc)
-            f.write(f"{d}\n")
-    f.close()
-            # print("val_epcoh",i,"ACC",acc,"max_acc",max_acc)
-
-    return a,b1
+# 當前是以Cifar10為data訓練
 if __name__ == "__main__":
-    batch_size=64
-    num_workers=4
-    epoch=5
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-bs", "--batch_size", type=int,
+                        default=32, help="batch size for dataloader")
+    parser.add_argument("--num_workers", type=int,
+                        default=8, help="max dataloader workers")
+    parser.add_argument("--epochs", type=int, default=20, help="train epochs")
+    args = parser.parse_args()
+
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
     ])
-    train_dataset = datasets.MNIST(root='../dataset/', train=True, download=True, transform=transform)
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size,num_workers=4)
+    train_dataset = datasets.MNIST(
+        root='./data/', train=True, download=False, transform=transform)
+    train_loader = DataLoader(train_dataset, shuffle=True,
+                              batch_size=args.batch_size, num_workers=args.num_workers)
 
-    test_dataset = datasets.MNIST(root='../dataset/', train=False, download=True, transform=transform)
-    test_loader = DataLoader(test_dataset, shuffle=False, batch_size=batch_size,num_workers=4)
+    test_dataset = datasets.MNIST(
+        root='./data/', train=False, download=False, transform=transform)
+    test_loader = DataLoader(test_dataset, shuffle=False,
+                             batch_size=args.batch_size, num_workers=args.num_workers)
+    model = CNN().cuda()
+    f = open('{}.txt'.format("ResNet18"), 'w')
 
-    # lr=0.001
-    model=CNN()
-    model1 = "CNN"
-    model.cuda()
     criterion = nn.CrossEntropyLoss()
-    lr=0.0001
-    optimizer_out = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.00001)
-    aa1,bb1=train_val(model1=model1,optimizer_in=optimizer_out,epoch=epoch)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.00001)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
+        optimizer, [5, 10, 20], gamma=0.1)
 
-    model=FC()
-    model1 = "FC"
-    model.cuda()
-    lr=0.0001
-    optimizer_out = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.00001)
-    aa2,bb2=train_val(model1=model1,optimizer_in=optimizer_out,epoch=epoch)
+    fig = plt.figure()
+    plt.ion()
+    epoch_list, train_acc_list, val_acc_list = [], [], []
 
-    plt.title("MNIST Classfication SUNNY") # title
-    plt.ylabel("Val_acc") # y label
-    plt.xlabel("iteration") # x label
-    plt.plot(aa1, bb1,color='r', label='CNN_acc')
-    plt.plot(aa2,bb2,color='b', label='FC_acc')
-    plt.legend()
-    # plt.yticks(np.arange(98,100,step=0.2))
+    for epoch in range(args.epochs):
+
+        train_acc, val_acc, max_acc = train_val(
+            model=model, criterion=criterion, optimizer=optimizer, lr_scheduler=lr_scheduler)
+        epoch_list.append(epoch)
+        val_acc_list.append(val_acc)
+        train_acc_list.append(train_acc)
+
+        print(optimizer.state_dict()['param_groups'][0]['lr'])
+
+        f.write('{}\n'.format(val_acc))
+        fig.clf()
+        plt.title("CIFAR10 Classfication SUNNY")  # title
+        plt.xlabel("epoch")  # x label
+        plt.ylabel("train_acc")  # y label
+        plt.subplot(121)
+        plt.plot(epoch_list, train_acc_list, label='resnet18')
+        # if epoch == epoch:
+        plt.legend()
+        plt.subplot(122)
+        plt.plot(epoch_list, val_acc_list, label='resnet18_val')
+        # if epoch == epoch:
+        plt.legend()
+        plt.pause(1)
+
+    plt.ioff()
+    plt.savefig('runs/trian/result.png')
     plt.show()
+
+    # import matplotlib.pyplot as plt
+    # a = 1
+    # while a <= 10:
+    #     b = plt.scatter(a, a ** 2, color='r', label="A")
+    #     plt.pause(0.1)
+    #     if a == 1:
+    #         plt.legend()
+    #     a = a + 1
+    #     plt.show()
