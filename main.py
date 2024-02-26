@@ -63,7 +63,7 @@ def train_val(model, criterion, optimizer, lr_scheduler):
     return train_acc, val_acc, max_acc
 
 
-# 當前是以Cifar10為data訓練
+# 當前是以MNIST為data訓練
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-bs", "--batch_size", type=int,
